@@ -1,77 +1,13 @@
-// This is the Edge Chat Demo Worker, built using Durable Objects!
 
-// ===============================
-// Introduction to Modules
-// ===============================
-//
-// The first thing you might notice, if you are familiar with the Workers platform, is that this
-// Worker is written differently from others you may have seen. It even has a different file
-// extension. The `mjs` extension means this JavaScript is an ES Module, which, among other things,
-// means it has imports and exports. Unlike other Workers, this code doesn't use
-// `addEventListener("fetch", handler)` to register its main HTTP handler; instead, it _exports_
-// a handler, as we'll see below.
-//
-// This is a new way of writing Workers that we expect to introduce more broadly in the future. We
-// like this syntax because it is *composable*: You can take two workers written this way and
-// merge them into one worker, by importing the two Workers' exported handlers yourself, and then
-// exporting a new handler that call into the other Workers as appropriate.
-//
-// This new syntax is required when using Durable Objects, because your Durable Objects are
-// implemented by classes, and those classes need to be exported. The new syntax can be used for
-// writing regular Workers (without Durable Objects) too, but for now, you must be in the Durable
-// Objects beta to be able to use the new syntax, while we work out the quirks.
-//
-// To see an example configuration for uploading module-based Workers, check out the wrangler.toml
-// file or one of our Durable Object templates for Wrangler:
-//   * https://github.com/cloudflare/durable-objects-template
-//   * https://github.com/cloudflare/durable-objects-rollup-esm
-//   * https://github.com/cloudflare/durable-objects-webpack-commonjs
-
-// ===============================
-// Required Environment
-// ===============================
-//
-// This worker, when deployed, must be configured with two environment bindings:
-// * rooms: A Durable Object namespace binding mapped to the ChatRoom class.
-// * limiters: A Durable Object namespace binding mapped to the RateLimiter class.
-//
-// Incidentally, in pre-modules Workers syntax, "bindings" (like KV bindings, secrets, etc.)
-// appeared in your script as global variables, but in the new modules syntax, this is no longer
-// the case. Instead, bindings are now delivered in an "environment object" when an event handler
-// (or Durable Object class constructor) is called. Look for the variable `env` below.
-//
-// We made this change, again, for composability: The global scope is global, but if you want to
-// call into existing code that has different environment requirements, then you need to be able
-// to pass the environment as a parameter instead.
-//
-// Once again, see the wrangler.toml file to understand how the environment is configured.
-
-// =======================================================================================
-// The regular Worker part...
-//
-// This section of the code implements a normal Worker that receives HTTP requests from external
-// clients. This part is stateless.
-
-// With the introduction of modules, we're experimenting with allowing text/data blobs to be
-// uploaded and exposed as synthetic modules. In wrangler.toml we specify a rule that files ending
-// in .html should be uploaded as "Data", equivalent to content-type `application/octet-stream`.
-// So when we import it as `HTML` here, we get the HTML content as an `ArrayBuffer`. This lets us
-// serve our app's static asset without relying on any separate storage. (However, the space
-// available for assets served this way is very limited; larger sites should continue to use Workers
-// KV to serve assets.)
 import HTML from "./chat.html";
 
-// `handleErrors()` is a little utility function that can wrap an HTTP request handler in a
-// try/catch and return errors to the client. You probably wouldn't want to use this in production
-// code but it is convenient when debugging and iterating.
+
 async function handleErrors(request, func) {
   try {
     return await func();
   } catch (err) {
     if (request.headers.get("Upgrade") == "websocket") {
-      // Annoyingly, if we return an HTTP error in response to a WebSocket request, Chrome devtools
-      // won't show us the response body! So... let's send a WebSocket response with an error
-      // frame instead.
+
       let pair = new WebSocketPair();
       pair[1].accept();
       pair[1].send(JSON.stringify({error: err.stack}));
@@ -83,14 +19,6 @@ async function handleErrors(request, func) {
   }
 }
 
-// In modules-syntax workers, we use `export default` to export our script's main event handlers.
-// Here, we export one handler, `fetch`, for receiving HTTP requests. In pre-modules workers, the
-// fetch handler was registered using `addEventHandler("fetch", event => { ... })`; this is just
-// new syntax for essentially the same thing.
-//
-// `fetch` isn't the only handler. If your worker runs on a Cron schedule, it will receive calls
-// to a handler named `scheduled`, which should be exported here in a similar way. We will be
-// adding other handlers for other types of events over time.
 export default {
   async fetch(request, env) {
     return await handleErrors(request, async () => {
@@ -122,76 +50,42 @@ async function handleApiRequest(path, request, env) {
 
   switch (path[0]) {
     case "room": {
-      // Request for `/api/room/...`.
-
+    
       if (!path[1]) {
         // The request is for just "/api/room", with no ID.
         if (request.method == "POST") {
           // POST to /api/room creates a private room.
-          //
-          // Incidentally, this code doesn't actually store anything. It just generates a valid
-          // unique ID for this namespace. Each durable object namespace has its own ID space, but
-          // IDs from one namespace are not valid for any other.
-          //
-          // The IDs returned by `newUniqueId()` are unguessable, so are a valid way to implement
-          // "anyone with the link can access" sharing. Additionally, IDs generated this way have
-          // a performance benefit over IDs generated from names: When a unique ID is generated,
-          // the system knows it is unique without having to communicate with the rest of the
-          // world -- i.e., there is no way that someone in the UK and someone in New Zealand
-          // could coincidentally create the same ID at the same time, because unique IDs are,
-          // well, unique!
+        
           let id = env.rooms.newUniqueId();
           return new Response(id.toString(), {headers: {"Access-Control-Allow-Origin": "*"}});
         } else {
-          // If we wanted to support returning a list of public rooms, this might be a place to do
-          // it. The list of room names might be a good thing to store in KV, though a singleton
-          // Durable Object is also a possibility as long as the Cache API is used to cache reads.
-          // (A caching layer would be needed because a single Durable Object is single-threaded,
-          // so the amount of traffic it can handle is limited. Also, caching would improve latency
-          // for users who don't happen to be located close to the singleton.)
-          //
-          // For this demo, though, we're not implementing a public room list, mainly because
-          // inevitably some trolls would probably register a bunch of offensive room names. Sigh.
+        
           return new Response("Method not allowed", {status: 405});
         }
       }
 
-      // OK, the request is for `/api/room/<name>/...`. It's time to route to the Durable Object
-      // for the specific room.
+    
       let name = path[1];
 
-      // Each Durable Object has a 256-bit unique ID. IDs can be derived from string names, or
-      // chosen randomly by the system.
+    
       let id;
       if (name.match(/^[0-9a-f]{64}$/)) {
-        // The name is 64 hex digits, so let's assume it actually just encodes an ID. We use this
-        // for private rooms. `idFromString()` simply parses the text as a hex encoding of the raw
-        // ID (and verifies that this is a valid ID for this namespace).
+      
         id = env.rooms.idFromString(name);
       } else if (name.length <= 32) {
-        // Treat as a string room name (limited to 32 characters). `idFromName()` consistently
-        // derives an ID from a string.
+      
         id = env.rooms.idFromName(name);
       } else {
         return new Response("Name too long", {status: 404});
       }
 
-      // Get the Durable Object stub for this room! The stub is a client object that can be used
-      // to send messages to the remote Durable Object instance. The stub is returned immediately;
-      // there is no need to await it. This is important because you would not want to wait for
-      // a network round trip before you could start sending requests. Since Durable Objects are
-      // created on-demand when the ID is first used, there's nothing to wait for anyway; we know
-      // an object will be available somewhere to receive our requests.
+   
       let roomObject = env.rooms.get(id);
 
-      // Compute a new URL with `/api/room/<name>` removed. We'll forward the rest of the path
-      // to the Durable Object.
+
       let newUrl = new URL(request.url);
       newUrl.pathname = "/" + path.slice(2).join("/");
 
-      // Send the request to the object. The `fetch()` method of a Durable Object stub has the
-      // same signature as the global `fetch()` function, but the request is always sent to the
-      // object, regardless of the request's URL.
       return roomObject.fetch(newUrl, request);
     }
 
@@ -200,62 +94,43 @@ async function handleApiRequest(path, request, env) {
   }
 }
 
-// =======================================================================================
-// The ChatRoom Durable Object Class
 
-// ChatRoom implements a Durable Object that coordinates an individual chat room. Participants
-// connect to the room using WebSockets, and the room broadcasts messages from each participant
-// to all others.
 export class ChatRoom {
   constructor(controller, env) {
-    // `controller.storage` provides access to our durable storage. It provides a simple KV
-    // get()/put() interface.
+  
     this.storage = controller.storage;
 
-    // `env` is our environment bindings (discussed earlier).
+  
     this.env = env;
 
-    // We will put the WebSocket objects for each client, along with some metadata, into
-    // `sessions`.
+
     this.sessions = [];
 
-    // We keep track of the last-seen message's timestamp just so that we can assign monotonically
-    // increasing timestamps even if multiple messages arrive simultaneously (see below). There's
-    // no need to store this to disk since we assume if the object is destroyed and recreated, much
-    // more than a millisecond will have gone by.
     this.lastTimestamp = 0;
   }
 
-  // The system will call fetch() whenever an HTTP request is sent to this Object. Such requests
-  // can only be sent from other Worker code, such as the code above; these requests don't come
-  // directly from the internet. In the future, we will support other formats than HTTP for these
-  // communications, but we started with HTTP for its familiarity.
+
   async fetch(request) {
     return await handleErrors(request, async () => {
       let url = new URL(request.url);
 
       switch (url.pathname) {
         case "/websocket": {
-          // The request is to `/api/room/<name>/websocket`. A client is trying to establish a new
-          // WebSocket session.
+          
           if (request.headers.get("Upgrade") != "websocket") {
             return new Response("expected websocket", {status: 400});
           }
 
-          // Get the client's IP address for use with the rate limiter.
+         
           let ip = request.headers.get("CF-Connecting-IP");
 
-          // To accept the WebSocket request, we create a WebSocketPair (which is like a socketpair,
-          // i.e. two WebSockets that talk to each other), we return one end of the pair in the
-          // response, and we operate on the other end. Note that this API is not part of the
-          // Fetch API standard; unfortunately, the Fetch API / Service Workers specs do not define
-          // any way to act as a WebSocket server today.
+
           let pair = new WebSocketPair();
 
-          // We're going to take pair[1] as our end, and return pair[0] to the client.
+         
           await this.handleSession(pair[1], ip);
 
-          // Now we return the other end of the pair to the client.
+         
           return new Response(null, { status: 101, webSocket: pair[0] });
         }
 
@@ -265,33 +140,28 @@ export class ChatRoom {
     });
   }
 
-  // handleSession() implements our WebSocket-based chat protocol.
+  
   async handleSession(webSocket, ip) {
-    // Accept our end of the WebSocket. This tells the runtime that we'll be terminating the
-    // WebSocket in JavaScript, not sending it elsewhere.
+
     webSocket.accept();
 
-    // Set up our rate limiter client.
+   
     let limiterId = this.env.limiters.idFromName(ip);
     let limiter = new RateLimiterClient(
         () => this.env.limiters.get(limiterId),
         err => webSocket.close(1011, err.stack));
 
-    // Create our session and add it to the sessions list.
-    // We don't send any messages to the client until it has sent us the initial user info
-    // message. Until then, we will queue messages in `session.blockedMessages`.
     let session = {webSocket, blockedMessages: []};
     this.sessions.push(session);
 
-    // Queue "join" messages for all online users, to populate the client's roster.
+  
     this.sessions.forEach(otherSession => {
       if (otherSession.name) {
         session.blockedMessages.push(JSON.stringify({joined: otherSession.name}));
       }
     });
 
-    // Load the last 100 messages from the chat history stored on disk, and send them to the
-    // client.
+
     let storage = await this.storage.list({reverse: true, limit: 100});
     let backlog = [...storage.values()];
     backlog.reverse();
@@ -304,16 +174,12 @@ export class ChatRoom {
     webSocket.addEventListener("message", async msg => {
       try {
         if (session.quit) {
-          // Whoops, when trying to send to this WebSocket in the past, it threw an exception and
-          // we marked it broken. But somehow we got another message? I guess try sending a
-          // close(), which might throw, in which case we'll try to send an error, which will also
-          // throw, and whatever, at least we won't accept the message. (This probably can't
-          // actually happen. This is defensive coding.)
+        
           webSocket.close(1011, "WebSocket broken.");
           return;
         }
 
-        // Check if the user is over their rate limit and reject the message if so.
+      
         if (!limiter.checkLimit()) {
           webSocket.send(JSON.stringify({
             error: "Your IP is being rate-limited, please try again later."
@@ -419,8 +285,7 @@ export class ChatRoom {
           return false;
         }
       } else {
-        // This session hasn't sent the initial user info message yet, so we're not sending them
-        // messages yet (no secret lurking!). Queue the message to be sent later.
+      
         session.blockedMessages.push(message);
         return true;
       }
@@ -434,16 +299,7 @@ export class ChatRoom {
   }
 }
 
-// =======================================================================================
-// The RateLimiter Durable Object class.
 
-// RateLimiter implements a Durable Object that tracks the frequency of messages from a particular
-// source and decides when messages should be dropped because the source is sending too many
-// messages.
-//
-// We utilize this in ChatRoom, above, to apply a per-IP-address rate limit. These limits are
-// global, i.e. they apply across all chat rooms, so if a user spams one chat room, they will find
-// themselves rate limited in all other chat rooms simultaneously.
 export class RateLimiter {
   constructor(controller, env) {
     // Timestamp at which this IP will next be allowed to send a message. Start in the distant
@@ -496,8 +352,7 @@ class RateLimiterClient {
     this.inCooldown = false;
   }
 
-  // Call checkLimit() when a message is received to decide if it should be blocked due to the
-  // rate limit. Returns `true` if the message should be accepted, `false` to reject.
+
   checkLimit() {
     if (this.inCooldown) {
       return false;
@@ -507,7 +362,7 @@ class RateLimiterClient {
     return true;
   }
 
-  // callLimiter() is an internal method which talks to the rate limiter.
+ 
   async callLimiter() {
     try {
       let response;
@@ -517,15 +372,7 @@ class RateLimiterClient {
         // we have to provide a dummy URL that will be ignored at the other end anyway.
         response = await this.limiter.fetch("https://dummy-url", {method: "POST"});
       } catch (err) {
-        // `fetch()` threw an exception. This is probably because the limiter has been
-        // disconnected. Stubs implement E-order semantics, meaning that calls to the same stub
-        // are delivered to the remote object in order, until the stub becomes disconnected, after
-        // which point all further calls fail. This guarantee makes a lot of complex interaction
-        // patterns easier, but it means we must be prepared for the occasional disconnect, as
-        // networks are inherently unreliable.
-        //
-        // Anyway, get a new limiter and try again. If it fails again, something else is probably
-        // wrong.
+      
         this.limiter = this.getLimiterStub();
         response = await this.limiter.fetch("https://dummy-url", {method: "POST"});
       }
