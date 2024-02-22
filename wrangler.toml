@@ -18,6 +18,7 @@ globs = ["**/*.html"]
 fallthrough = false
 
 # Indicate that you want the ChatRoom and RateLimiter classes to be callable as Durable Objects.
-[[migrations]]
+
+[migrations]
 tag = "v1" # Should be unique for each entry
 new_classes = ["ChatRoom", "RateLimiter"]
