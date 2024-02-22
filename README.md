@@ -1,10 +1,9 @@
 ### <a href="https://chat.jessejesse.com"> chat.JesseJesse.com</a>
 utilizing [Durable Objects](https://blog.cloudflare.com/introducing-workers-durable-objects) This app runs 100% on Cloudflare's edge.
+<img width="1440" alt="Screenshot 2024-02-22 at 2 01 02 AM" src="https://github.com/sudo-self/chat.jessejesse.com/assets/119916323/abb82fa3-d1d9-43df-b7fb-62c6fdcf6eab">
 
-This chat app uses a Durable Object to control each chat room. Users connect to the object using WebSockets. Messages from one user are broadcast to all the other users. The chat history is also stored in durable storage, but this is only for history. Real-time messages are relayed directly from one user to others without going through the storage layer.
 
-This chat app is only a few hundred lines of code. The deployment configuration is only a few lines. Yet, it will scale seamlessly to any number of chat rooms, limited only by Cloudflare's available resources. Of course, any individual chat room's scalability has a limit, since each object is single-threaded. But, that limit is far beyond what a human participant could keep up with anyway.
 
-    wrangler publish
+
 
 
