@@ -1,0 +1,161 @@
+  /* Global styles */
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    backgroud-ima 
+  }
+
+  /* Chat log styles */
+  #chatlog {
+    position: fixed;
+    top: 0;
+    bottom: 32px;
+    left: 0;
+    right: 200px;
+    overflow-y: auto;
+    padding: 8px;
+    overflow-wrap: break-word;
+  }
+  #chatlog span.username {
+    font-weight: bold;
+  }
+  p {
+    margin-top: 0;
+    margin-bottom: 8px;
+  }
+  p:last-of-type {
+    margin: 0;
+  }
+
+  /* Spacer */
+  #spacer {
+    height: calc(100vh - 32px - 5em);
+  }
+
+  /* Roster styles */
+  #roster {
+    position: fixed;
+    right: 0;
+    top: 0;
+    bottom: 32px;
+    width: 200px;
+    border-left: none;
+    font-weight: bold;
+    padding: 8px;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Media Queries */
+  @media(max-width:600px) {
+    #roster { display: none; }
+    #chatlog { right: 0; }
+  }
+
+  /* Chat input and room indicator */
+  #chat-input {
+    position: fixed;
+    width: 100%;
+    height: 32px;
+    bottom: 0;
+    left: 0;
+    border: none;
+    border-top: none;
+    padding-left: 32px;
+    outline: none;
+  }
+  #chatroom::before {
+    z-index: 1;
+    display: block;
+    content: ">_";
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 32px;
+    height: 32px;
+    line-height: 32px;
+    text-align: center;
+    font-weight: bold;
+    color: #888;
+    -webkit-text-stroke-width: 2px;
+  }
+
+  /* Name form */
+  #name-form {
+    position: fixed;
+    z-index: 3;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background-color: #d3dde4;
+  }
+  #name-input {
+    position: fixed;
+    font-size: 200%;
+    top: calc(50% - 1em);
+    left: calc(50% - 8em);
+    width: 16em;
+    height: 2em;
+    margin: 0;
+    text-align: center;
+    border: 2px solid #25b387;
+  }
+  #name-form p {
+    position: fixed;
+    top: calc(50% + 3em);
+    width: 100%;
+    text-align: center;
+  }
+
+  /* Room form */
+  #room-form {
+    position: fixed;
+    z-index: 2;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background-color: white;
+    font-size: 200%;
+    margin-top: calc(50vh - 3em);
+    text-align: center;
+  }
+  #room-name {
+    font-size: inherit;
+    border: 1px solid #bbb;
+    height: 2em;
+    width: 16em;
+    padding-left: 1em;
+  }
+  #room-form button {
+    font-size: inherit;
+    border: 2px solid #25b387;
+    background-color: #eee;
+    height: 2em;
+  }
+
+  /* Responsive adjustments */
+  @media(max-width:660px) {
+    #name-input, #room-form { font-size: 150%; }
+    #name-form p { font-size: 75%; }
+  }
+  @media(max-width:500px) {
+    #name-input, #room-form { font-size: 100%; }
+    #name-form p { font-size: 50%; }
+  }
+
+  /* Specific widths */
+  #go-public {
+    width: 4em;
+  }
+  #go-private {
+    width: 20em;
+  }
+
+ 
