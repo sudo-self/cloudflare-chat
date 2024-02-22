@@ -1,4 +1,4 @@
-## <a href="https://chat.jessejesse.com"> Chat.JesseJesse.com</a>
+### <a href="https://chat.jessejesse.com"> chat.JesseJesse.com</a>
 utilizing [Durable Objects](https://blog.cloudflare.com/introducing-workers-durable-objects) This app runs 100% on Cloudflare's edge.
 
 This chat app uses a Durable Object to control each chat room. Users connect to the object using WebSockets. Messages from one user are broadcast to all the other users. The chat history is also stored in durable storage, but this is only for history. Real-time messages are relayed directly from one user to others without going through the storage layer.
